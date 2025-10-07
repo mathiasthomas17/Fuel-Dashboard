@@ -568,7 +568,7 @@ if selected_weeks:
 # ==========================
 # KPI METRICS
 # ==========================
-st.title("⛽ Menengai Oil Monitoring Dashboard")
+st.title("⛽ Menengai Oil Fuel Monitoring Dashboard")
 
 total_direct_thefts = df["actual_theft"].sum()
 total_return_pipe = df["possible_return_pipe_theft"].sum()
