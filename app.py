@@ -567,7 +567,7 @@ if selected_weeks:
 
 #  Button
 st.sidebar.markdown("---")  # adds a visual separator
-st.sidebar.link_button("📄 Open Actual Data in Google Sheets", "https://docs.google.com/spreadsheets/d/1IuzUrejc2uhNza1v_DexuwL1HOI8FxeYsuSVHj_HAHw/edit?usp=sharing")
+st.sidebar.link_button("📄 Open Actual Data", "https://docs.google.com/spreadsheets/d/1IuzUrejc2uhNza1v_DexuwL1HOI8FxeYsuSVHj_HAHw/edit?usp=sharing")
 
 # ==========================
 # KPI METRICS
