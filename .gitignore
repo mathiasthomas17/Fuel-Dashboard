@@ -1,0 +1,14 @@
+# === CREDENTIALS (DO NOT PUSH) ===
+service_account.json
+
+# === STREAMLIT CONFIG ===
+.streamlit/secrets.toml
+
+# === PYTHON CACHE & ENV ===
+__pycache__/
+venv/
+*.pyc
+.env/
+
+# === MISC ===
+.DS_Store
