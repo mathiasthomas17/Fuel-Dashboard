@@ -1076,13 +1076,16 @@
 # st.plotly_chart(fig_heatmap, use_container_width=True)
 
 
-# END OF LOCAL HOSTED
-#Version 4
+# # END OF LOCAL HOSTED
+
+# Final Copy
+# Version 4 - Menengai Fuel Dashboard (final, includes Weekly Theft vs Distance section last)
 import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 import plotly.express as px
+import plotly.graph_objects as go
 
 # ==========================
 # PAGE CONFIGURATION
@@ -1121,8 +1124,10 @@ scope = [
     "https://www.googleapis.com/auth/drive"
 ]
 
+# Use Streamlit secrets for credentials (Streamlit Cloud compatible)
 import json
 from google.oauth2.service_account import Credentials
+
 creds_dict = st.secrets["google_service_account"]
 creds = Credentials.from_service_account_info(dict(creds_dict), scopes=scope)
 client = gspread.authorize(creds)
@@ -1133,14 +1138,19 @@ def load_data():
         sheet = client.open_by_key(SPREADSHEET_ID)
         worksheet = sheet.worksheet(SHEET_NAME)
         data = worksheet.get_all_records()
-        df = pd.DataFrame(data)
-        return df
+        df_local = pd.DataFrame(data)
+        return df_local
     except Exception as e:
-        st.error(f"❌ Failed to load data: {e}")
-        st.stop()
+        # Return None so caller can handle display logic
+        return {"error": str(e)}
 
-df = load_data()
-st.success("✅ Data loaded successfully")
+loaded = load_data()
+if isinstance(loaded, dict) and "error" in loaded:
+    st.error(f"❌ Failed to load data: {loaded['error']}")
+    st.stop()
+else:
+    df = loaded
+    st.success("✅ Data loaded successfully")
 
 # ==========================
 # DATA CLEANING
@@ -1193,11 +1203,10 @@ selected_weeks = st.sidebar.multiselect(
 if selected_weeks:
     df = df[df["week"].isin(selected_weeks)]
 
-#  Button
 st.sidebar.markdown("---")
 st.sidebar.link_button(
     "📄 Open Actual Data",
-    "https://docs.google.com/spreadsheets/d/1IuzUrejc2uhNza1v_DexuwL1HOI8FxeYsuSVHj_HAHw/edit?usp=sharing"
+    f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit?usp=sharing"
 )
 
 # ==========================
@@ -1209,16 +1218,16 @@ total_direct_thefts = df["actual_theft"].sum()
 total_return_pipe = df["possible_return_pipe_theft"].sum()
 total_missed_fillings = df["missed_fillings"].sum()
 total_combined = total_direct_thefts + total_return_pipe
-total_consumed = df["amnt_consumed"].sum()
-avg_rate = df["consumption_rate"].mean()
+total_consumed = df["amnt_consumed"].sum() if "amnt_consumed" in df.columns else 0
+avg_rate = df["consumption_rate"].mean() if "consumption_rate" in df.columns else 0
 
 col1, col2, col3, col4, col5, col6 = st.columns(6)
 col1.metric("💧 Direct Thefts", f"{total_direct_thefts:,.0f} Ltrs")
 col2.metric("🧰 Return Pipe Thefts", f"{total_return_pipe:,.0f} Ltrs")
 col3.metric("⛔ Missed Fillings", f"{total_missed_fillings:,.0f}")
-col4.metric("🚛 Total Thefts", f"{total_combined:,.0f} Ltrs")
+col4.metric("🚛 Total Thefts (Combined)", f"{total_combined:,.0f} Ltrs")
 col5.metric("⛽ Fuel Consumed", f"{total_consumed:,.0f} Ltrs")
-col6.metric("⚙️ Avg Consumption Rate", f"{avg_rate:,.2f} L/Hr")
+col6.metric("⚙️ Avg Consumption Rate", f"{avg_rate:,.2f}")
 
 st.markdown("---")
 
@@ -1345,3 +1354,98 @@ if "category" in df.columns:
     st.plotly_chart(fig_pie, use_container_width=True)
 else:
     st.info("No category data found.")
+
+st.markdown("---")
+
+# =======================================================
+# NEW SECTION: WEEKLY COMPARISON (THEFT vs DISTANCE) — LAST
+# =======================================================
+st.subheader("🚚 Weekly Theft vs Distance Analysis by Category")
+
+df["total_theft"] = df["actual_theft"] + df["possible_return_pipe_theft"]
+
+weekly_summary = (
+    df.groupby(["week", "category"], as_index=False)
+    .agg({
+        "actual_theft": "sum",
+        "possible_return_pipe_theft": "sum",
+        "total_distance_covered": "sum"
+    })
+)
+weekly_summary["total_theft"] = (
+    weekly_summary["actual_theft"] + weekly_summary["possible_return_pipe_theft"]
+)
+weekly_summary["theft_per_km"] = (
+    weekly_summary["total_theft"] / weekly_summary["total_distance_covered"].replace(0, 1)
+)
+weekly_summary["pct_change_theft"] = (
+    weekly_summary.groupby("category")["total_theft"].pct_change() * 100
+)
+weekly_summary["pct_change_distance"] = (
+    weekly_summary.groupby("category")["total_distance_covered"].pct_change() * 100
+)
+
+# --- Category selector for trend chart ---
+if "category" in df.columns:
+    selected_cat = st.selectbox("Select Category for Trend", sorted(df["category"].dropna().unique()))
+else:
+    selected_cat = None
+
+if selected_cat:
+    cat_df = weekly_summary[weekly_summary["category"] == selected_cat].sort_values("week")
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=cat_df["week"],
+        y=cat_df["total_theft"],
+        name="Total Theft (Ltrs)",
+        marker_color=PRIMARY_GREEN,
+        yaxis="y1"
+    ))
+    fig.add_trace(go.Line(
+        x=cat_df["week"],
+        y=cat_df["total_distance_covered"],
+        name="Distance Covered (Km)",
+        line=dict(color=YELLOW, width=3, dash="dot"),
+        yaxis="y2"
+    ))
+    fig.update_layout(
+        title=f"📊 Weekly Theft vs Distance Trend - {selected_cat}",
+        yaxis=dict(title="Total Theft (Ltrs)"),
+        yaxis2=dict(title="Distance Covered (Km)", overlaying="y", side="right"),
+        xaxis=dict(title="Week"),
+        legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0)"),
+        bargap=0.2,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+# --- Theft per km by category (overall across selected weeks/filters) ---
+week_cat_pct = (
+    weekly_summary.groupby("category", as_index=False)[["total_theft", "total_distance_covered"]].sum()
+)
+week_cat_pct["theft_per_km"] = (
+    week_cat_pct["total_theft"] / week_cat_pct["total_distance_covered"].replace(0, 1)
+)
+
+fig_pct = px.bar(
+    week_cat_pct,
+    x="category",
+    y="theft_per_km",
+    title="⚖️ Theft per Km by Category (Overall)",
+    color="category",
+    text=week_cat_pct["theft_per_km"].round(2),
+)
+fig_pct.update_layout(xaxis_title="Category", yaxis_title="Theft per Km")
+st.plotly_chart(fig_pct, use_container_width=True)
+
+# --- Heatmap: Weekly Theft Intensity per Category ---
+pivot_df = weekly_summary.pivot(index="category", columns="week", values="total_theft").fillna(0)
+fig_heatmap = px.imshow(
+    pivot_df,
+    text_auto=True,
+    aspect="auto",
+    title="🔥 Weekly Theft Intensity per Category",
+    color_continuous_scale="Greens"
+)
+fig_heatmap.update_layout(xaxis_title="Week", yaxis_title="Category")
+st.plotly_chart(fig_heatmap, use_container_width=True)
